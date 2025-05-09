@@ -1,9 +1,7 @@
 import numpy as np
-from scipy.integrate import odeint
 from tqdm import trange
 import itertools
 import pandas as pd
-import matplotlib.pyplot as plt
 import pickle
 import os
 
@@ -224,11 +222,17 @@ def evaluate_q_table(env,
 
 if __name__ == "__main__":
 
+    np.random.seed(42)
+
     discretizations = [21, 51, 101]
     alphas = [0.1, 0.5]
     gammas = [0.9, 0.99]
     training_settings = [ (1000, 200), (5000, 500), (10000, 500)]
-    init_states = [np.array([5.0, 0.0]), np.array([-5.0, 0.0])]
+    init_states = np.random.uniform(
+        low=[-5.0, -5.0],
+        high=[5.0, 5.0],
+        size=(100, 2)
+    )
     results = []
 
     # make folder to save models
@@ -239,9 +243,7 @@ if __name__ == "__main__":
         # rebuild env @ this resolution
         env = CruiseControlEnv(
             n_x=n, n_v=n,
-            x_range=(-5, 5), v_range=(-5, 5),
-            control_inputs=env.u_list, delta=env.delta
-        )
+            x_range=(-5, 5), v_range=(-5, 5))
 
         # fresh agent
         agent = QLearningAgent(
