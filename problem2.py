@@ -43,7 +43,7 @@ class GridEnvironment:
                 self.state = (nx, ny)
                 if self.state == self.goal:
                     return self.state, 100
-                return self.state, -1
+                dist = abs(self.goal[0] - nx) + abs(self.goal[1] - ny)
+                return self.state, -1 - 0.1 * dist
         return self.state, -10
-    
     
