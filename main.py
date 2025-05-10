@@ -1,9 +1,12 @@
 import numpy as np
-from tqdm import trange
+from scipy.integrate import odeint
+from tqdm import trange, tqdm
 import itertools
 import pandas as pd
+import matplotlib.pyplot as plt
 import pickle
 import os
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 class CruiseControlEnv:
     def __init__(self, x_range=(-5, 5), v_range=(-5, 5), n_x=21, n_v=21,
@@ -23,26 +26,30 @@ class CruiseControlEnv:
         self.delta = delta
         self._t_span = np.linspace(0, self.delta, 2)  # just start & end
 
+    def _dynamics(self, s, t, u):
+        """ ODE RHS: s = [x, v],  ẋ = v, v̇ = u """
+        x, v = s
+        return [v, u]
 
     def step(self, s, u):
         """ Given continuous state s and control u, returns next_state.
         Clips to bounds.
 
         integrating manually to save on overhead. Old odeint version is commented below """
-        # traj = odeint(lambda s, t: [s[1], u], s, self._t_span, args=(u,))
-        # s_next = traj[-1]
-        # clip bounds
-        # s_next[0] = np.clip(s_next[0], self.X[0], self.X[-1])
-        # s_next[1] = np.clip(s_next[1], self.V[0], self.V[-1])
-        # return s_next
+        traj = odeint(self._dynamics, s, self._t_span, args=(u,))
+        s_next = traj[-1]
+        #clip bounds
+        s_next[0] = np.clip(s_next[0], self.X[0], self.X[-1])
+        s_next[1] = np.clip(s_next[1], self.V[0], self.V[-1])
+        return s_next
 
-        x, v = s
-        x_next = x + v * self.delta  # exact: ∫v dt = v·Δt
-        v_next = v + u * self.delta  # exact: ∫u dt = u·Δt
-        # clip bounds
-        x_next = np.clip(x_next, self.X[0], self.X[-1])
-        v_next = np.clip(v_next, self.V[0], self.V[-1])
-        return np.array([x_next, v_next])
+        # x, v = s
+        # x_next = x + v * self.delta  # exact: ∫v dt = v·Δt
+        # v_next = v + u * self.delta  # exact: ∫u dt = u·Δt
+        # # clip bounds
+        # x_next = np.clip(x_next, self.X[0], self.X[-1])
+        # v_next = np.clip(v_next, self.V[0], self.V[-1])
+        # return np.array([x_next, v_next])
 
     def discretize(self, s):
         """ Map continuous s = (x, v) to indices (i, j) in the Q‐table. """
@@ -139,7 +146,7 @@ def train_q_learning(env,
     if init_states is None:
         init_states = [np.array([5.0, 0.0])]
 
-    for ep in trange(num_episodes, desc="Q‑learning"):
+    for ep in range(num_episodes):
         # pick a random start among the provided initials
         s = init_states[np.random.randint(len(init_states))].copy()
 
@@ -220,6 +227,56 @@ def evaluate_q_table(env,
 
 
 
+def run_experiment(args):
+    n, alpha, gamma, epsilon, num_eps, max_steps, init_states, save_dir = args
+
+    # rebuild env @ this resolution
+    env = CruiseControlEnv(
+        n_x=n, n_v=n,
+        x_range=(-5, 5), v_range=(-5, 5))
+
+    # fresh agent
+    agent = QLearningAgent(
+        n_x=n, n_v=n, n_u=env.n_u,
+        alpha=alpha, gamma=gamma, epsilon=epsilon
+    )
+
+    # train
+    trained = train_q_learning(
+        env, agent,
+        num_episodes=num_eps,
+        max_steps=max_steps
+    )
+
+    # evaluate
+    sr, ar, al = evaluate_q_table(
+        env, trained.Q,
+        init_states=init_states,
+        num_episodes=100,
+        max_steps=500
+    )
+
+    # Save agent to file
+    fname = (f"agent_bins{n}_a{alpha}_g{gamma}_e{epsilon}_ep{num_eps}_ms{max_steps}.pkl")
+    path = os.path.join(save_dir, fname)
+    with open(path, "wb") as f:
+        pickle.dump(trained, f)
+
+    return {
+        "n_bins": n,
+        "alpha": alpha,
+        "gamma": gamma,
+        "epsilon": epsilon,
+        "episodes": num_eps,
+        "max_steps": max_steps,
+        "success_rate": sr,
+        "avg_return": ar,
+        "avg_length": al
+    }
+
+
+
+
 if __name__ == "__main__":
 
     np.random.seed(42)
@@ -227,72 +284,37 @@ if __name__ == "__main__":
     discretizations = [21, 51, 101]
     alphas = [0.1, 0.5]
     gammas = [0.9, 0.99]
+    epsilons = [0.05, 0.1, 0.2]
     training_settings = [ (1000, 200), (5000, 500), (10000, 500)]
     init_states = np.random.uniform(
         low=[-5.0, -5.0],
         high=[5.0, 5.0],
         size=(100, 2)
     )
-    results = []
-
     # make folder to save models
     save_dir = os.path.join(os.getcwd(), "models")
     os.makedirs(save_dir, exist_ok=True)
 
-    for n, alpha, gamma, (num_eps, max_steps) in itertools.product( discretizations, alphas, gammas, training_settings):
-        # rebuild env @ this resolution
-        env = CruiseControlEnv(
-            n_x=n, n_v=n,
-            x_range=(-5, 5), v_range=(-5, 5))
+    configs = []
 
-        # fresh agent
-        agent = QLearningAgent(
-            n_x=n, n_v=n, n_u=env.n_u,
-            alpha=alpha, gamma=gamma, epsilon=0.1
-        )
+    for (n, alpha, gamma, (num_eps, max_steps), epsilon) in itertools.product( discretizations, alphas, gammas, training_settings, epsilons):
+        configs.append((n, alpha, gamma, epsilon, num_eps, max_steps,
+                        init_states, save_dir))
 
-        # train
-        trained = train_q_learning(
-            env, agent,
-            num_episodes=num_eps,
-            max_steps=max_steps
-        )
-
-        # evaluate
-        sr, ar, al = evaluate_q_table(
-            env, trained.Q,
-            init_states=init_states,
-            num_episodes=100,
-            max_steps=500
-        )
-
-        # record results
-        results.append({
-            "n_bins": n,
-            "alpha": alpha,
-            "gamma": gamma,
-            "episodes": num_eps,
-            "max_steps": max_steps,
-            "success_rate": sr,
-            "avg_return": ar,
-            "avg_length": al
-        })
-
-        # Save agent to file
-        fname = (
-            f"agent_bins{n}"
-            f"_a{alpha}"
-            f"_g{gamma}"
-            f"_ep{num_eps}"
-            f"_ms{max_steps}.pkl"
-        )
-        path = os.path.join(save_dir, fname)
-        with open(path, "wb") as f:
-            pickle.dump(trained, f)
+    results = []
+    # 3) Run them in parallel
+    with ProcessPoolExecutor() as executor:
+        futures = [executor.submit(run_experiment, cfg) for cfg in configs]
+        for future in tqdm(as_completed(futures), total=len(futures), desc="Running experiments"):
+            results.append(future.result())
 
     # 4) tabulate & summarize
     df = pd.DataFrame(results)
+    df.set_option('display.max_columns', None)
+    df.set_option('display.max_rows', None)
     print(df)
+    dfpath = os.path.join(save_dir, "dataframe.pkl")
+    df.to_pickle(dfpath)
     print("\nAvg success rate by discretization:")
     print(df.groupby("n_bins").success_rate.mean())
 
