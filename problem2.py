@@ -47,3 +47,22 @@ class GridEnvironment:
                 return self.state, -1 - 0.1 * dist
         return self.state, -10
     
+# --- 2.3 Q-Learning Agent ---
+class QAgent:
+    def __init__(self, env):
+        self.env = env
+        self.actions = env.actions
+        height, width = env.grid.shape
+        self.q_table = np.random.uniform(low=-0.5, high=0.5, size=(height, width, len(self.actions)))
+
+    def choose_action(self, state, epsilon):
+        if random.random() < epsilon:
+            return random.randint(0, 3)
+        return np.argmax(self.q_table[state])
+
+    def update(self, state, action, reward, next_state, alpha, gamma):
+        self.q_table[state][action] += alpha * (reward + gamma * np.max(self.q_table[next_state]) - self.q_table[state][action])
+
+
+
+
