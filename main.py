@@ -310,8 +310,8 @@ if __name__ == "__main__":
 
     # 4) tabulate & summarize
     df = pd.DataFrame(results)
-    df.set_option('display.max_columns', None)
-    df.set_option('display.max_rows', None)
+    pd.set_option('display.max_columns', None)
+    pd.set_option('display.max_rows', None)
     print(df)
     dfpath = os.path.join(save_dir, "dataframe.pkl")
     df.to_pickle(dfpath)
