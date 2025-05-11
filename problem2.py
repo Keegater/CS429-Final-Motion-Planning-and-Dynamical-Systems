@@ -5,6 +5,7 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 import time
 
+
 # --- 2.1 Map Abstraction ---
 def abstract_map(image_path, target_size):
     image = Image.open(image_path)
@@ -108,11 +109,13 @@ def run(image_path, start, goal):
 
     for learning_rate, discount_factor, episodes, max_steps in parameters:
         label = f"lr={learning_rate}, df={discount_factor}"
-        print(f"\nLearning Rate: {learning_rate}, Discount Factor: {discount_factor}, Episodes: {episodes}, Max Steps: {max_steps}")
-        
+        print(
+            f"\nLearning Rate: {learning_rate}, Discount Factor: {discount_factor}, Episodes: {episodes}, Max Steps: {max_steps}")
+
         env = GridEnvironment(grid, start, goal)
         agent = QAgent(env)
-        training_time = q_learning(env, agent, episodes, max_steps, learning_rate, discount_factor, exploration_rate=0.1)
+        training_time = q_learning(env, agent, episodes, max_steps, learning_rate, discount_factor,
+                                   exploration_rate=0.1)
         total_reward, reached_goal = model_evaluation(env, agent)
         print(f"Reached Goal: {reached_goal}, Total Reward: {total_reward:.2f}, Training Time: {training_time:.2f}s")
 
@@ -121,8 +124,37 @@ def run(image_path, start, goal):
         training_times_all.append(training_time)
         labels.append(label)
 
-run('maps/map1.bmp', start=(0, 0), goal=(49, 49))
 
+    # Total Reward
+    plt.figure(figsize=(10, 5))
+    plt.bar(labels, total_rewards_all, color='skyblue')
+    plt.title("Total Reward by Learning Parameters")
+    plt.ylabel("Total Reward")
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.show()
+
+    # Success Rate
+    plt.figure(figsize=(10, 5))
+    plt.bar(labels, success_flags_all, color='lightgreen')
+    plt.title("Success (1=Reached Goal) by Learning Parameters")
+    plt.ylabel("Success Flag")
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.show()
+
+    # Training Time
+    plt.figure(figsize=(10, 5))
+    plt.bar(labels, training_times_all, color='salmon')
+    plt.title("Training Time by Learning Parameters")
+    plt.ylabel("Training Time (s)")
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.show()
+
+
+
+run('maps/map1.bmp', start=(0, 0), goal=(49, 49))
 
 
 
