@@ -3,6 +3,7 @@ import random
 from PIL import Image
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+import time
 
 # --- 2.1 Map Abstraction ---
 def abstract_map(image_path, target_size):
@@ -43,8 +44,7 @@ class GridEnvironment:
                 self.state = (nx, ny)
                 if self.state == self.goal:
                     return self.state, 100
-                dist = abs(self.goal[0] - nx) + abs(self.goal[1] - ny)
-                return self.state, -1 - 0.1 * dist
+                return self.state, -1
         return self.state, -10
     
 # --- 2.3 Q-Learning Agent ---
@@ -55,13 +55,73 @@ class QAgent:
         height, width = env.grid.shape
         self.q_table = np.random.uniform(low=-0.5, high=0.5, size=(height, width, len(self.actions)))
 
-    def choose_action(self, state, epsilon):
-        if random.random() < epsilon:
+    def choose_action(self, state, exploration_rate):
+        if random.random() < exploration_rate:
             return random.randint(0, 3)
         return np.argmax(self.q_table[state])
 
-    def update(self, state, action, reward, next_state, alpha, gamma):
-        self.q_table[state][action] += alpha * (reward + gamma * np.max(self.q_table[next_state]) - self.q_table[state][action])
+    def update(self, state, action, reward, next_state, learning_rate, discount_factor):
+        self.q_table[state][action] += learning_rate * (reward + discount_factor * np.max(self.q_table[next_state]) - self.q_table[state][action])
+
+# --- 2.4 Q-learning Process ---
+def q_learning(env, agent, episodes, max_steps, learning_rate, discount_factor, exploration_rate):
+    start_time = time.time()
+    for episode in tqdm(range(episodes)):
+        state = env.reset()
+        for _ in range(max_steps):
+            action = agent.choose_action(state, exploration_rate)
+            next_state, reward = env.step(action)
+            agent.update(state, action, reward, next_state, learning_rate, discount_factor)
+            state = next_state
+            if reward == 100:
+                break
+    training_time = time.time() - start_time
+    return training_time
+
+# --- 2.5 Evaluation Function ---
+def model_evaluation(env, agent, episodes=100):
+    state = env.reset()
+    total_reward = 0
+    for _ in range(episodes):
+        action = np.argmax(agent.q_table[state])
+        state, reward = env.step(action)
+        total_reward += reward
+        if reward == 100:
+            return total_reward, True
+    return total_reward, False
+
+# --- 2.6 Run Experiments ---
+def run(image_path, start, goal):
+    grid = abstract_map(image_path, (50, 50))
+
+    parameters = [
+        (0.01, 0.9, 2000, 100),
+        (0.01, 0.99, 2000, 100),
+        (0.05, 0.9, 5000, 200),
+        (0.05, 0.99, 5000, 200),
+    ]
+
+    total_rewards_all = []
+    success_flags_all = []
+    training_times_all = []
+    labels = []
+
+    for learning_rate, discount_factor, episodes, max_steps in parameters:
+        label = f"lr={learning_rate}, df={discount_factor}"
+        print(f"\nLearning Rate: {learning_rate}, Discount Factor: {discount_factor}, Episodes: {episodes}, Max Steps: {max_steps}")
+        
+        env = GridEnvironment(grid, start, goal)
+        agent = QAgent(env)
+        training_time = q_learning(env, agent, episodes, max_steps, learning_rate, discount_factor, exploration_rate=0.1)
+        total_reward, reached_goal = model_evaluation(env, agent)
+        print(f"Reached Goal: {reached_goal}, Total Reward: {total_reward:.2f}, Training Time: {training_time:.2f}s")
+
+        total_rewards_all.append(total_reward)
+        success_flags_all.append(int(reached_goal))
+        training_times_all.append(training_time)
+        labels.append(label)
+
+run('maps/map1.bmp', start=(0, 0), goal=(49, 49))
 
 
 
