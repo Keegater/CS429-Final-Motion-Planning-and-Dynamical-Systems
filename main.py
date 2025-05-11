@@ -6,6 +6,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import pickle
 import os
+import problem2
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 class CruiseControlEnv:
@@ -318,3 +319,4 @@ if __name__ == "__main__":
     print("\nAvg success rate by discretization:")
     print(df.groupby("n_bins").success_rate.mean())
 
+    problem2.run('maps/map1.bmp', start=(0, 0), goal=(49, 49))
