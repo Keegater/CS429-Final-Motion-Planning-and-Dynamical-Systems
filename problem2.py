@@ -4,7 +4,7 @@ from PIL import Image
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import time
-
+import math
 
 # --- 2.1 Map Abstraction ---
 def abstract_map(image_path, target_size):
@@ -88,8 +88,9 @@ def model_evaluation(env, agent, episodes=100):
         state, reward = env.step(action)
         total_reward += reward
         if reward == 100:
-            return total_reward, True
-    return total_reward, False
+             return total_reward, True, 0
+    dist = np.linalg.norm(np.array(env.goal) - np.array(state))
+    return total_reward, False, dist
 
 # --- 2.6 Run Experiments ---
 def run(image_path, start, goal):
@@ -116,8 +117,8 @@ def run(image_path, start, goal):
         agent = QAgent(env)
         training_time = q_learning(env, agent, episodes, max_steps, learning_rate, discount_factor,
                                    exploration_rate=0.1)
-        total_reward, reached_goal = model_evaluation(env, agent)
-        print(f"Reached Goal: {reached_goal}, Total Reward: {total_reward:.2f}, Training Time: {training_time:.2f}s")
+        total_reward, reached_goal, distance_to_goal = model_evaluation(env, agent)
+        print(f"Reached Goal: {reached_goal}, Total Reward: {total_reward:.2f}, Training Time: {training_time:.2f}s, Distance to Goal: {distance_to_goal:.2f}")
 
         total_rewards_all.append(total_reward)
         success_flags_all.append(int(reached_goal))
