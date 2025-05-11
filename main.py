@@ -34,23 +34,13 @@ class CruiseControlEnv:
 
     def step(self, s, u):
         """ Given continuous state s and control u, returns next_state.
-        Clips to bounds.
-
-        integrating manually to save on overhead. Old odeint version is commented below """
+        Clips to bounds."""
         traj = odeint(self._dynamics, s, self._t_span, args=(u,))
         s_next = traj[-1]
         #clip bounds
         s_next[0] = np.clip(s_next[0], self.X[0], self.X[-1])
         s_next[1] = np.clip(s_next[1], self.V[0], self.V[-1])
         return s_next
-
-        # x, v = s
-        # x_next = x + v * self.delta  # exact: ∫v dt = v·Δt
-        # v_next = v + u * self.delta  # exact: ∫u dt = u·Δt
-        # # clip bounds
-        # x_next = np.clip(x_next, self.X[0], self.X[-1])
-        # v_next = np.clip(v_next, self.V[0], self.V[-1])
-        # return np.array([x_next, v_next])
 
     def discretize(self, s):
         """ Map continuous s = (x, v) to indices (i, j) in the Q‐table. """
@@ -59,7 +49,7 @@ class CruiseControlEnv:
         j = np.argmin(np.abs(self.V - s[1]))
         return i, j
 
-    def reward(self, s, u, s_next, alpha=1.0, beta=1.0, gamma=0.01, R_goal=100.0, tol=1e-2):
+    def reward(self, s, u, s_next, alpha=1.0, beta=1.0, gamma=0.01, R_goal=100.0, tol=0.05):
         # step penalty - punishes more steps (rewards quicker parking)
         r = -1.0
 
@@ -73,7 +63,7 @@ class CruiseControlEnv:
 
         return r
 
-    def simulate_trajectory(self, s0, Q, max_steps=500, tol=1e-2):
+    def simulate_trajectory(self, s0, Q, max_steps=500, tol=0.05):
         """ Roll out a trajectory under greedy policy from Q‐table until
         |x|,|v| < tol or max_steps reached.
 
@@ -89,7 +79,7 @@ class CruiseControlEnv:
             s = self.step(s, u)
             traj.append(s.copy())
 
-            if abs(s[0]) < tol and abs(s[1]) < tol:
+            if np.hypot(s[0], s[1]) < tol:
                 break
         return np.array(traj)
 
@@ -135,7 +125,7 @@ def train_q_learning(env,
                      num_episodes: int = 5000,
                      max_steps: int = 500,
                      init_states: np.ndarray = None,
-                     tol: float = 1e-2):
+                     tol: float = 0.05):
     """ Train the agent on the environment.
     - env: an instance of CruiseControlEnv
     - agent: our QLearningAgent
@@ -169,7 +159,7 @@ def train_q_learning(env,
 
             s = s_next
             # stop if parked
-            if abs(s[0]) < tol and abs(s[1]) < tol:
+            if np.hypot(s[0], s[1]) < tol:
                 break
 
     return agent
@@ -180,7 +170,7 @@ def evaluate_q_table(env,
                      init_states: np.ndarray,
                      num_episodes: int = 100,
                      max_steps: int = 500,
-                     tol: float = 1e-2):
+                     tol: float = 0.05):
     """
     Evaluate a learned Q-table by running greedy rollouts.
 
@@ -256,6 +246,19 @@ def run_experiment(args):
         num_episodes=100,
         max_steps=500
     )
+
+    dt = env.delta
+    traj = env.simulate_trajectory(np.array([5, 0]), trained.Q)
+    t2 = np.linspace(0, dt * len(traj), len(traj))
+    plt.figure(figsize=(8, 4))
+    plt.plot(t2, traj[:, 0], 'r-', label='position $x(t)$')
+    plt.plot(t2, traj[:, 1], 'b-', label='velocity $v(t)$')
+    plt.xlabel('Time (s)')
+    plt.ylabel('States')
+    plt.title(f"agent_bins{n}_a{alpha}_g{gamma}_e{epsilon}_ep{num_eps}_ms{max_steps}")
+    plt.legend()
+    plt.grid(True)
+    plt.show()
 
     # Save agent to file
     fname = (f"agent_bins{n}_a{alpha}_g{gamma}_e{epsilon}_ep{num_eps}_ms{max_steps}.pkl")
