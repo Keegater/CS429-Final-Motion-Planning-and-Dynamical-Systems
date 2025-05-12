@@ -4,7 +4,7 @@ from PIL import Image
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import time
-import math
+import itertools
 
 # --- 2.1 Map Abstraction ---
 def abstract_map(image_path, target_size):
@@ -45,7 +45,8 @@ class GridEnvironment:
                 self.state = (nx, ny)
                 if self.state == self.goal:
                     return self.state, 100
-                return self.state, -1
+                dist = abs(self.goal[0] - nx) + abs(self.goal[1] - ny)
+                return self.state, 1-0.01 * dist
         return self.state, -10
     
 # --- 2.3 Q-Learning Agent ---
@@ -80,10 +81,10 @@ def q_learning(env, agent, episodes, max_steps, learning_rate, discount_factor, 
     return training_time
 
 # --- 2.5 Evaluation Function ---
-def model_evaluation(env, agent, episodes=100):
+def model_evaluation(env, agent, steps=100):
     state = env.reset()
     total_reward = 0
-    for _ in range(episodes):
+    for _ in range(steps):
         action = np.argmax(agent.q_table[state])
         state, reward = env.step(action)
         total_reward += reward
@@ -96,66 +97,23 @@ def model_evaluation(env, agent, episodes=100):
 def run(image_path, start, goal):
     grid = abstract_map(image_path, (50, 50))
 
-    parameters = [
-        (0.01, 0.9, 2000, 100),
-        (0.01, 0.99, 2000, 100),
-        (0.05, 0.9, 5000, 200),
-        (0.05, 0.99, 5000, 200),
-    ]
+    learning_rates = [0.3, 0.5]
+    discount_factors = [0.9, 0.99]
+    episodes_list = [2000, 5000]
+    steps_list = [500, 1000]
 
-    total_rewards_all = []
-    success_flags_all = []
-    training_times_all = []
-    labels = []
 
-    for learning_rate, discount_factor, episodes, max_steps in parameters:
-        label = f"lr={learning_rate}, df={discount_factor}"
-        print(
-            f"\nLearning Rate: {learning_rate}, Discount Factor: {discount_factor}, Episodes: {episodes}, Max Steps: {max_steps}")
+    for learning_rate, discount_factor, episodes, max_steps in itertools.product(learning_rates, discount_factors, episodes_list, steps_list):
+        print(f"\nLearning Rate: {learning_rate}, Discount Factor: {discount_factor}, Episodes: {episodes}, Max Steps: {max_steps}")
 
         env = GridEnvironment(grid, start, goal)
         agent = QAgent(env)
-        training_time = q_learning(env, agent, episodes, max_steps, learning_rate, discount_factor,
-                                   exploration_rate=0.1)
+        training_time = q_learning(env, agent, episodes, max_steps, learning_rate, discount_factor, exploration_rate=0.3)
         total_reward, reached_goal, distance_to_goal = model_evaluation(env, agent)
+        
         print(f"Reached Goal: {reached_goal}, Total Reward: {total_reward:.2f}, Training Time: {training_time:.2f}s, Distance to Goal: {distance_to_goal:.2f}")
 
-        total_rewards_all.append(total_reward)
-        success_flags_all.append(int(reached_goal))
-        training_times_all.append(training_time)
-        labels.append(label)
 
-
-    # Total Reward
-    plt.figure(figsize=(10, 5))
-    plt.bar(labels, total_rewards_all, color='skyblue')
-    plt.title("Total Reward by Learning Parameters")
-    plt.ylabel("Total Reward")
-    plt.xticks(rotation=45)
-    plt.tight_layout()
-    plt.show()
-
-    # Success Rate
-    plt.figure(figsize=(10, 5))
-    plt.bar(labels, success_flags_all, color='lightgreen')
-    plt.title("Success (1=Reached Goal) by Learning Parameters")
-    plt.ylabel("Success Flag")
-    plt.xticks(rotation=45)
-    plt.tight_layout()
-    plt.show()
-
-    # Training Time
-    plt.figure(figsize=(10, 5))
-    plt.bar(labels, training_times_all, color='salmon')
-    plt.title("Training Time by Learning Parameters")
-    plt.ylabel("Training Time (s)")
-    plt.xticks(rotation=45)
-    plt.tight_layout()
-    plt.show()
-
-
-
-run('maps/map1.bmp', start=(0, 0), goal=(49, 49))
 
 
 
